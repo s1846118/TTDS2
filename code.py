@@ -62,15 +62,17 @@ class eval():
                         else:
                             DCG20 = 0
                     else:
-                        iDGC+=3/np.log2(i+1)
+                        # iDGC+=3/np.log2(i+1)
                         if len(np.where(relQ[:,1]==r)[0]) != 0:
                             DCG20 += relQ[np.where(relQ[:,1]==r)[0],2][0]/np.log2(i+1)
+                            iDGC+= relQ[np.where(relQ[:,1]==r)[0],2][0]
+                            print(relQ[np.where(relQ[:,1]==r)[0],2][0])
                             if i == 9:
                                 if DCG20 == 0:
-                                    nDCG20 = 0
+                                    nDCG10 = 0
                                 else:
-                                    nDCG20 = DCG20/(iDGC)
-                                self.index[system+1][query+1]['nDCGa10'] = round(nDCG20, 3)
+                                    nDCG10 = DCG20/(iDGC)
+                                self.index[system+1][query+1]['nDCGa10'] = round(nDCG10, 3)
                         else:
                             DCG20 += 0
 
