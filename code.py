@@ -1,5 +1,9 @@
 from numpy import genfromtxt
 import numpy as np
+import re
+import pandas as pd
+from nltk import text
+from nltk.stem import PorterStemmer
 
 class eval():
 
@@ -87,12 +91,48 @@ class eval():
                 self.index[system+1][query+1]['AP'] = round(AvgP, 2)
                 self.index[system+1][query+1]['nDCGa20'] = round(nDCG20, 3)
 
-def main():
-    evl = eval('system_results.csv', 'qrels.csv')
-    evl.create_index()
-    evl.stats()
-    print(evl.index)
+class text_eval():
 
+    def __init__(self, path, stopwords):
+
+        if stopwords is not None: # We may not give stopwords as an argument
+            with open(stopwords,'r') as f: # Parse stopwords
+                doc = f.read()
+                Pattern = "\n" 
+                lst = re.split(Pattern, doc)
+                self.stopwords = [elem for elem in lst if elem != '']
+
+        self.corpus_df = pd.read_csv(path,'\t')
+        line = []
+        line.insert(0, {self.corpus_df.columns.values[0]: self.corpus_df.columns.values[0], self.corpus_df.columns.values[1]: self.corpus_df.columns.values[1]})
+        # concatenate two dataframe
+        self.corpus_df = pd.concat([pd.DataFrame(line),self.corpus_df], ignore_index=True)
+        self.corpus_df = self.corpus_df.rename(columns={self.corpus_df.columns.values[0]:'Corpus', self.corpus_df.columns.values[1]:'Verse'})
+
+    def pre_process(self): # Preprocess data
+
+        ps = PorterStemmer()
+
+        for row in range(self.corpus_df.shape[0]):
+
+            self.corpus_df.iloc[row]['Verse'] = re.split('[^A-Z^a-z\d]', self.corpus_df.iloc[row]['Verse']) 
+            self.corpus_df.iloc[row]['Verse'] = [elem.lower() for elem in self.corpus_df.iloc[row]['Verse'] if elem != ''] # Tokenisation
+            self.corpus_df.iloc[row]['Verse'] = [elem for elem in self.corpus_df.iloc[row]['Verse'] if not(elem in self.stopwords)] # Remove stopwords
+            self.corpus_df.iloc[row]['Verse'] = [ps.stem(word).lower() for word in self.corpus_df.iloc[row]['Verse']] # Porter stemming
+
+    def MICHI(self):
+        pass
+
+
+def main():
+    # evl = eval('system_results.csv', 'qrels.csv')
+    # evl.create_index()
+    # evl.stats()
+    # print(evl.index)
+
+    t_evl = text_eval("train_and_dev.tsv", stopwords='../../Collections/stopwords.txt')
+    t_evl.pre_process()
+    print(t_evl.corpus_df)
 
 
 
