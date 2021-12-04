@@ -163,48 +163,68 @@ class text_eval():
             self.tokens += x
 
         self.tokens = list(set(self.tokens))
+        self.corpussies = list(set(self.corpus_df['Corpus']))
         self.michi = {} # Dictionary where each key is the token and contains a dict where keys are corpus and values are MI(index 0) CHI(index 1)
         
         for i, token in enumerate(self.tokens):
             self.michi[token] = {}
             for corpus in list(set(self.corpus_df['Corpus'])):
-                    MI = 0
-                    chi = 0
-                    print(i)
-                    self.michi[token][corpus] = {}
-                    corp_docs = self.corpus_df[self.corpus_df['Corpus']==corpus]['Verse']
-                    non_corp_docs = self.corpus_df[self.corpus_df['Corpus']!=corpus]['Verse']
+                MI = 0
+                chi = 0
+                print(i)
+                self.michi[token][corpus] = {}
+                corp_docs = self.corpus_df[self.corpus_df['Corpus']==corpus]['Verse']
+                non_corp_docs = self.corpus_df[self.corpus_df['Corpus']!=corpus]['Verse']
 
-                    N = self.corpus_df.shape[0] # Total number of documents. Stays constant.
-                    N11 = len([1 for x in corp_docs if token in x])
-                    N10 = len([1 for x in non_corp_docs if token in x])
-                    N01 = len([1 for x in corp_docs if token not in x])
-                    N00 = len([1 for x in non_corp_docs if token not in x])
+                N = self.corpus_df.shape[0] # Total number of documents. Stays constant.
+                N11 = len([1 for x in corp_docs if token in x])
+                N10 = len([1 for x in non_corp_docs if token in x])
+                N01 = len([1 for x in corp_docs if token not in x])
+                N00 = len([1 for x in non_corp_docs if token not in x])
 
-                    try:
-                        MI = (N11/N)*math.log((N*N11)/((N11+N10)*(N11+N01)),2)+ (N01/N)*math.log((N*N01)/((N01+N00)*(N11+N01)),2)+ (N10/N)*math.log((N*N10)/((N10+N11)*(N00+N10)),2)+ (N00/N)*math.log((N*N00)/((N10+N00)*(N01+N00)),2)
-                    except ValueError:
+                try:
+                    one = (N11/N)*math.log((N*N11)/((N11+N10)*(N11+N01)),2)
+                except:
+                    one = 0
+                try:
+                    two = (N01/N)*math.log((N*N01)/((N01+N00)*(N11+N01)),2)
+                except:
+                    two = 0
+                try:
+                    three = (N10/N)*math.log((N*N10)/((N10+N11)*(N00+N10)),2)
+                except:
+                    three = 0
+                try:
+                    four = (N00/N)*math.log((N*N00)/((N10+N00)*(N01+N00)),2)
+                except:
+                    four = 0
 
-                        if (token == 'muhammad' and corpus == 'Quran'):
-                            print('WHY WHY WHY')
-                        self.michi[token][corpus]['MI'] = 0
-                    try:
-                        if N11 == 0:
-                            chi = 0
-                        else:
-                            E00 = N*((N00+N10)/N)*((N00+N01)/N)
-                            E01 = N*((N01+N11)/N)*((N01+N00)/N)
-                            E10 = N*((N10+N11)/N)*((N10+N00)/N)
-                            E11 = N*((N11+N10)/N)*((N11+N01)/N)
+                MI = one+two+three+four
 
-                            chi = ((N11-E11)**2)/E11 + ((N00-E00)**2)/E00 + ((N01-E01)**2)/E01 + ((N10-E10)**2)/E10 
-                    except:
-                        chi = 0
+                try:
+                    E00 = N*((N00+N10)/N)*((N00+N01)/N)
+                except:
+                    one = 0
+                try:
+                    E01 = N*((N01+N11)/N)*((N01+N00)/N)
+                except:
+                    two = 0
+                try:
+                    E10 = N*((N10+N11)/N)*((N10+N00)/N)
+                except:
+                    three = 0
+                try:
+                    E11 = N*((N11+N10)/N)*((N11+N01)/N)
+                except:
+                    four = 0
 
-                    self.michi[token][corpus]['MI'] = round(MI,3)
-                    self.michi[token][corpus]['chi'] = round(chi,3)
+                    chi = one + two + three + four
 
-    def michi_to_csv(file):
+                self.michi[token][corpus]['MI'] = round(MI,3)
+                self.michi[token][corpus]['chi'] = round(chi,3)
+
+
+    def michi_to_csv(self, file):
         
         with open(file, 'r') as f:
             string = f.read()
@@ -407,10 +427,12 @@ def main():
     t_evl.pre_process()
     print(t_evl.corpus_df)
 
-    # t_evl.MICHI()
+    t_evl.MICHI()
     
-    # with open('michi.txt', 'w') as f:
-    #     f.write(str(t_evl.michi))
+    with open('michi.txt', 'w') as f:
+        f.write(str(t_evl.michi))
+
+    t_evl.michi_to_csv('michi.txt')
 
     # corpus_data = t_evl.corpus_df.copy(deep=True)
 
