@@ -2,6 +2,7 @@ from nltk.util import transitive_closure
 from numpy import genfromtxt
 import numpy as np
 import re
+from numpy.lib.function_base import average
 import pandas as pd
 from nltk import text
 from nltk.stem import PorterStemmer
@@ -12,6 +13,9 @@ from sklearn.model_selection import train_test_split
 from sklearn.utils.extmath import cartesian
 from sklearn import svm
 import scipy
+from sklearn.metrics import confusion_matrix
+import ast
+import operator
 
 
 
@@ -101,6 +105,27 @@ class eval():
                 self.index[system+1][query+1]['AP'] = round(AvgP, 2)
                 self.index[system+1][query+1]['nDCGa20'] = round(nDCG20, 3)
 
+    def write_to_csv(self):
+        results = "system_number,query_number,P@10,R@50,r-precision,AP,nDCG@10,nDCG@20" + "\n"
+
+        for system in self.index:
+            averages = {'system_number':str(system),'mean':'mean','Pa10':0,'Ra50':0,'r-precision':0,'AP':0,'nDCGa10':0,'nDCGa20':0}
+            for query in self.index[system]:
+                results += str(system) + "," + str(query) + "," + str(self.index[system][query]['Pa10']) + "," + str(self.index[system][query]['Ra50']) + "," + str(self.index[system][query]['r-precision']) + "," + str(self.index[system][query]['AP']) + "," + str(self.index[system][query]['nDCGa10']) + ',' + str(self.index[system][query]['nDCGa20']) + '\n'
+                averages['Pa10']+= self.index[system][query]['Pa10']
+                averages['Ra50']+= self.index[system][query]['Ra50']
+                averages['r-precision']+= self.index[system][query]['r-precision']
+                averages['AP']+= self.index[system][query]['AP']
+                averages['nDCGa10']+= self.index[system][query]['nDCGa10']
+                averages['nDCGa20']+= self.index[system][query]['nDCGa20']
+
+            results += str(system) + "," + 'mean' + "," + str(averages['Pa10']/10) + "," + str(averages['Ra50']/10) + "," + str(averages['r-precision']/10) + "," + str(averages['AP']/10) + "," + str(averages['nDCGa10']/10) + ',' + str(averages['nDCGa20']/10) + '\n'
+
+        with open('ir_eval.csv','w') as f:
+            f.write(results)
+            f.close()
+
+
 class text_eval():
 
     def __init__(self, path, stopwords):
@@ -159,6 +184,9 @@ class text_eval():
                     try:
                         MI = (N11/N)*math.log((N*N11)/((N11+N10)*(N11+N01)),2)+ (N01/N)*math.log((N*N01)/((N01+N00)*(N11+N01)),2)+ (N10/N)*math.log((N*N10)/((N10+N11)*(N00+N10)),2)+ (N00/N)*math.log((N*N00)/((N10+N00)*(N01+N00)),2)
                     except ValueError:
+
+                        if (token == 'muhammad' and corpus == 'Quran'):
+                            print('WHY WHY WHY')
                         self.michi[token][corpus]['MI'] = 0
                     try:
                         if N11 == 0:
@@ -173,8 +201,69 @@ class text_eval():
                     except:
                         chi = 0
 
-                    self.michi[token][corpus]['MI'] = MI
-                    self.michi[token][corpus]['chi'] = chi
+                    self.michi[token][corpus]['MI'] = round(MI,3)
+                    self.michi[token][corpus]['chi'] = round(chi,3)
+
+    def michi_to_csv(file):
+        
+        with open(file, 'r') as f:
+            string = f.read()
+            f.close()
+        
+        michi = ast.literal_eval(string)
+
+        print(michi)
+
+        MIOT = {}
+        MINT = {}
+        MIQR = {}
+
+        mi_dict = {'NT':MINT, 'OT':MIOT, 'Quran':MIQR}
+
+        CHIOT = {}
+        CHINT = {}
+        CHIQR = {}
+
+        chi_dict = {'NT':CHINT, 'OT':CHIOT, 'Quran':CHIQR}
+
+        for token in michi:
+            for book in michi[token]:
+                mi_dict[book][token] = michi[token][book]['MI']
+                chi_dict[book][token] = michi[token][book]['chi']
+
+        MIOT = text_eval.sort_dict(MIOT)
+        MINT = text_eval.sort_dict(MINT)
+        MIQR = text_eval.sort_dict(MIQR)
+
+        CHIQR = text_eval.sort_dict(CHIQR)
+        CHINT = text_eval.sort_dict(CHINT)
+        CHIOT = text_eval.sort_dict(CHIOT)
+
+        print(str(MIQR))
+
+        text_eval.write_p2_file(MIOT, 'MIOT')
+        text_eval.write_p2_file(MINT, 'MINT')
+        text_eval.write_p2_file(MIQR, 'MIQR')
+        text_eval.write_p2_file(CHIQR, 'CHIQR')
+        text_eval.write_p2_file(CHINT, 'CHINT')
+        text_eval.write_p2_file(CHIOT, 'CHIOT')
+        
+    def write_p2_file(dict, filename):
+
+        writing_str = ""
+
+        with open(filename+'.txt','w') as f:
+            for token in dict.keys():
+                writing_str+= str(token) + "," + str(dict[token]) + '\n'
+
+            f.write(writing_str)
+
+    def sort_dict(dicky):
+
+        dicky = dict(sorted(dicky.items(), key=operator.itemgetter(1), reverse=True))
+
+        return dicky
+        
 
 class text_classifier():
 
@@ -221,11 +310,14 @@ class text_classifier():
             
         # and do the same for the categories
         cat2id = {}
+        id2cat = {}
         for cat_id,cat in enumerate(titles):
             cat2id[cat] = cat_id
+            id2cat[cat_id] = cat
 
         self.word_id = word2id
         self.cat_id = cat2id
+        self.id2cat = id2cat
 
         return word2id, cat2id
 
@@ -274,66 +366,99 @@ class text_classifier():
                 num_correct += 1
         return num_correct / num_total
 
-    # def compute_stats(self, predictions, true_output:
+    def compute_stats(self, predictions, true_output):
 
+        cm = confusion_matrix(predictions, true_output)
+
+        rates = {'TP':{},'FP':{},'TN':{},'FN':{}}
+
+        FP = cm.sum(axis=0) - np.diag(cm)  
+        FN = cm.sum(axis=1) - np.diag(cm)
+        TP = np.diag(cm)
+        TN = cm.sum() - (FP + FN + TP)
+
+        Precision = TP/(TP + FP)
+        Recall = TP/(TP + FN)
+        f1 = 2*((Precision*Recall)/(Precision+Recall))
+
+        Precision = np.append(f1, np.average(f1))
+        Recall = np.append(Recall, np.average(Recall))
+        f1 = np.append(Precision, np.average(Precision))
+
+        
+        print(Precision, Recall, f1)
 
 
 def main():
     # evl = eval('system_results.csv', 'qrels.csv')
     # evl.create_index()
     # evl.stats()
-    # hello = str(evl.index)
-    # print(hello)
+    # evl.write_to_csv()
+ 
+    # parse_csv = text_eval.michi_to_csv('michi.txt')
 
-    testing = text_eval('test.tsv', stopwords='../../Collections/stopwords.txt')
-    testing.pre_process()
-    testing_corpus = testing.corpus_df.copy(deep=True)
+    
+
+    # testing = text_eval('test.tsv', stopwords='../../Collections/stopwords.txt')
+    # testing.pre_process()
+    # testing_corpus = testing.corpus_df.copy(deep=True)
     
     t_evl = text_eval("train_and_dev.tsv", stopwords='../../Collections/stopwords.txt')
     t_evl.pre_process()
+    print(t_evl.corpus_df)
 
-    corpus_data = t_evl.corpus_df.copy(deep=True)
+    # t_evl.MICHI()
+    
+    # with open('michi.txt', 'w') as f:
+    #     f.write(str(t_evl.michi))
 
-    print(corpus_data)
+    # corpus_data = t_evl.corpus_df.copy(deep=True)
 
-    text_class = text_classifier(corpus_data)
+    # print(corpus_data)
 
-    print(text_class.corpus)
+    ###### RUN THIS FOR PART 3 ##########  corpus_data = the pre_processed data from part 1
 
-    vocab,titles = text_class.get_vocab(text_class.corpus)
+    # text_class = text_classifier(corpus_data)
 
-    wordID, catID = text_class.word_cat_2ID(vocab,titles)
+    # print(text_class.corpus)
 
-    Xtrain, Xtest = text_class.shuffle_and_split(text_class.corpus)
+    # vocab,titles = text_class.get_vocab(text_class.corpus)
 
-    BOW_matrix_train = text_class.convert_to_bow(Xtrain, wordID)
+    # wordID, catID = text_class.word_cat_2ID(vocab,titles)
 
-    BOW_matrix_test = text_class.convert_to_bow(Xtest, wordID)
+    # Xtrain, Xtest = text_class.shuffle_and_split(text_class.corpus)
 
-    BOW_matrix_test2 = text_class.convert_to_bow(testing_corpus, wordID)
+    # BOW_matrix_train = text_class.convert_to_bow(Xtrain, wordID)
 
-    print(catID)
+    # BOW_matrix_test = text_class.convert_to_bow(Xtest, wordID)
 
-    Ytrain = text_class.catID(Xtrain['Corpus'], catID)
+    # BOW_matrix_test2 = text_class.convert_to_bow(testing_corpus, wordID)
 
-    Ytest = text_class.catID(Xtest['Corpus'], catID)
+    # print(catID)
 
-    Ytest2 = text_class.catID(testing_corpus['Corpus'], catID)
+    # Ytrain = text_class.catID(Xtrain['Corpus'], catID)
 
-    model = text_class.train_model(BOW_matrix_train,Ytrain, 3)
+    # Ytest = text_class.catID(Xtest['Corpus'], catID)
 
-    predictions = model.predict(BOW_matrix_train)
+    # Ytest2 = text_class.catID(testing_corpus['Corpus'], catID)
 
-    print(text_class.compute_accuracy(predictions,Ytrain))
+    # model = text_class.train_model(BOW_matrix_train,Ytrain, 3)
 
-    predictions = model.predict(BOW_matrix_test)
+    # predictions = model.predict(BOW_matrix_train)
 
-    print(text_class.compute_accuracy(predictions,Ytest))
+    # print(text_class.compute_accuracy(predictions,Ytrain))
 
-    predictions = model.predict(BOW_matrix_test2)
+    # predictions = model.predict(BOW_matrix_test)
 
-    print(text_class.compute_accuracy(predictions,Ytest2))
+    # print(text_class.compute_accuracy(predictions,Ytest))
 
+    # predictions = model.predict(BOW_matrix_test2)
+
+    # print(text_class.compute_accuracy(predictions,Ytest2))
+
+    # print(text_class.compute_stats(predictions, Ytest2))
+
+    ######## PART 3 END ##########
 
 
 if __name__ == '__main__':
