@@ -71,42 +71,43 @@ class eval():
                     AvgP = sum(precisions)/relQ.shape[0]
 
                 # Discounted Cumulative Gain
-                DCG20 = 0
-                iDGC = 0
-
-                print(np.sum(relQ[:,2]))
+                DCG20 = []
+                iDGC = []
 
                 for i, r in enumerate(results20[:,2]):
                     if i == 0:
-                        iDGC = relQ[i,2]
+                        iDGC.append(relQ[i,2])
                         if len(np.where(relQ[:,1]==r)[0]) != 0:
-                            DCG20 = relQ[np.where(relQ[:,1]==r)[0],2][0]      
+                            DCG20.append(relQ[np.where(relQ[:,1]==r)[0],2][0])     
                         else:
-                            DCG20 = 0
+                            DCG20.append(0)
                     else:
                         if len(np.where(relQ[:,1]==r)[0]) != 0:
-                            DCG20 += relQ[np.where(relQ[:,1]==r)[0],2][0]/np.log2(i+1)
+                            DCG20.append(relQ[np.where(relQ[:,1]==r)[0],2][0]/np.log2(i+1))
 
                             if i+1 > relQ.shape[0]:
-                                iDGC += 0
+                                iDGC.append(0)
                             else:
-                                iDGC+= relQ[i,2]
+                                iDGC.append(relQ[i,2]/np.log2(i+1))
                         else:
-                            DCG20 += 0
+                            DCG20.append(0)
                             if i+1 > relQ.shape[0]:
-                                iDGC+=0
+                                iDGC.append(0)
                             else:
-                                iDGC+=relQ[i,2]
+                                iDGC.append(relQ[i,2]/np.log2(i+1))
 
                     if i == 9: # We must assign iDCG10
-                        nDCG10 = DCG20/(iDGC)
+                        nDCG10 = sum(DCG20)/sum(iDGC)
                         self.index[system+1][query+1]['nDCGa10'] = round(nDCG10, 3)
 
                     if i == 19:
-                        if DCG20 == 0:
+                        if sum(DCG20) == 0:
                             nDCG20 = 0
                         else:
-                            nDCG20 = DCG20/(iDGC)
+                            nDCG20 = sum(DCG20)/sum(iDGC)
+
+                print(DCG20)
+                print(iDGC)
                         
                     
                 
