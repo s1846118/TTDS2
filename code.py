@@ -16,7 +16,11 @@ import scipy
 from sklearn.metrics import confusion_matrix
 import ast
 import operator
-
+from gensim.models import ldamodel
+from gensim.test.utils import common_texts
+from gensim.corpora.dictionary import Dictionary
+from gensim.test.utils import datapath
+import gensim.corpora as corpora
 
 
 class eval():
@@ -244,20 +248,14 @@ class text_eval():
                 self.michi[token][corpus]['MI'] = round(MI,3)
                 self.michi[token][corpus]['chi'] = round(chi,3)
 
-        with open('RoselynYUMMYMUMMY.txt', 'w') as f:
-            f.write(nvals)
-            f.close()
 
-
-    def michi_to_csv(self, file):
+    def michi_to_csv(self, michi):
         
-        with open(file, 'r') as f:
-            string = f.read()
-            f.close()
+        # with open(file, 'r') as f:
+        #     string = f.read()
+        #     f.close()
         
-        michi = ast.literal_eval(string)
-
-        print(michi)
+        michi = michi
 
         MIOT = {}
         MINT = {}
@@ -284,14 +282,14 @@ class text_eval():
         CHINT = text_eval.sort_dict(CHINT)
         CHIOT = text_eval.sort_dict(CHIOT)
 
-        print(str(MIQR))
-
         text_eval.write_p2_file(MIOT, 'MIOT')
         text_eval.write_p2_file(MINT, 'MINT')
         text_eval.write_p2_file(MIQR, 'MIQR')
         text_eval.write_p2_file(CHIQR, 'CHIQR')
         text_eval.write_p2_file(CHINT, 'CHINT')
         text_eval.write_p2_file(CHIOT, 'CHIOT')
+
+        return MIOT, MINT, MIQR, CHIOT, CHINT, CHIQR
         
     def write_p2_file(dict, filename):
 
@@ -327,6 +325,19 @@ class text_classifier():
             self.corpus_df.iloc[row]['Verse'] = [elem for elem in self.corpus_df.iloc[row]['Verse'] if not(elem in self.stopwords)] # Remove stopwords
             if pstem == True:
                 self.corpus_df.iloc[row]['Verse'] = [ps.stem(word).lower() for word in self.corpus_df.iloc[row]['Verse']] # Porter stemming
+
+    def ext_pre_process(corpus, topMI):
+
+        ps = PorterStemmer()
+
+        corpus2= corpus.copy(deep=True)
+
+        for row in range(corpus.shape[0]):
+            corpus2.iloc[row]['Verse'] = [elem.lower() for elem in corpus2.iloc[row]['Verse'] if elem != ''] # Tokenisation
+            corpus2.iloc[row]['Verse'] = [elem for elem in corpus2.iloc[row]['Verse'] if elem in topMI] # Remove stopwords
+            corpus2.iloc[row]['Verse'] = [ps.stem(word).lower() for word in corpus2.iloc[row]['Verse']] # Porter stemming
+
+        return corpus2
 
     def get_vocab(self, corpus):
 
@@ -366,11 +377,11 @@ class text_classifier():
 
         return word2id, cat2id
 
-    def shuffle_and_split(self,corpus):
+    def shuffle_and_split(self,corpus, split):
 
         shuffled_corpus = corpus.sample(frac=1) # Shuffles the dataframe
 
-        Xtrain, Xtest = train_test_split(shuffled_corpus, test_size=0.2)
+        Xtrain, Xtest = train_test_split(shuffled_corpus, test_size=split)
 
         return Xtrain, Xtest
 
@@ -395,8 +406,10 @@ class text_classifier():
 
         return [cat2id[x] for x in categories]
 
-    def train_model(self, BOW_matrix, y_train, c):
+    def train_model(self, BOW_matrix, y_train, c, lin = True):
 
+        if lin == False:
+            model = svm.SVC(C=c, kernel='rbf')
         model = svm.LinearSVC(C=c)
         # then train the model!
         model.fit(BOW_matrix,y_train)
@@ -426,89 +439,250 @@ class text_classifier():
         Recall = TP/(TP + FN)
         f1 = 2*((Precision*Recall)/(Precision+Recall))
 
-        Precision = np.append(f1, np.average(f1))
-        Recall = np.append(Recall, np.average(Recall))
-        f1 = np.append(Precision, np.average(Precision))
+        Precision = np.round(np.append(Precision, np.average(Precision)),3)
+        Recall = np.round(np.append(Recall, np.average(Recall)),3)
+        f1 = np.round(np.append(f1, np.average(f1)),3)
 
         
-        print(Precision, Recall, f1)
+        return Precision, Recall, f1
 
 
 def main():
 
-    ############# TASK 3 #############################
+    # ############# TASK 1 #############################
 
     evl = eval('system_results.csv', 'qrels.csv')
     evl.create_index()
     evl.stats()
     evl.write_to_csv()
 
-    ################ END #################################
+    # ################ END #################################
 
-    ################ TASK2 ##############################
+    ############### TASK2 ##############################
     
-    # t_evl = text_eval("train_and_dev.tsv", stopwords='../../Collections/stopwords.txt')
-    # t_evl.pre_process(pstem=True)
-    # print(t_evl.corpus_df)
+    t_evl = text_eval("train_and_dev.tsv", stopwords='../../Collections/stopwords.txt')
+    t_evl.pre_process(pstem=True)
+    t_evl.MICHI()
+    t_evl.michi_to_csv(t_evl.michi)
 
-    # t_evl.MICHI()
+    ############### END. NOTE LDA AT BOTTOM ##############################
 
+    # Pre-process the development (unseen) data
+    dev = text_eval('train_and_dev.tsv',stopwords='../../Collections/stopwords.txt')
+
+    dev.pre_process()
+
+    #  Make hard copy of previous corpus
+    corpus_data = t_evl.corpus_df.copy(deep=True)
+
+    #### RUN THIS FOR PART 3 ##########  corpus_data = the pre_processed data from part 1
+
+    # Create instance to use the data processing methods
+    text_class = text_classifier(corpus_data)
+
+    # Convert the text to tokens and get classes
+    vocab,titles = text_class.get_vocab(text_class.corpus)
+
+    # Create unique work to ID and category to ID mapping
+    wordID, catID = text_class.word_cat_2ID(vocab,titles)
+
+    # Split into train and test.
+    Xtrain, Xtest = text_class.shuffle_and_split(text_class.corpus, 0.20)
+    Xitrain, Xitest = text_class.shuffle_and_split(text_class.corpus, 0.10)
+
+    # Testing, Training and Development sets converted to bag of words
+    BOW_matrix_train = text_class.convert_to_bow(Xtrain, wordID)
+    BOW_matrix_test = text_class.convert_to_bow(Xtest, wordID)
+    BOW_matrix_dev = text_class.convert_to_bow(dev.corpus_df, wordID)
+
+    # IMPROVED MODEL 
+    BOW_matrix_itrain = text_class.convert_to_bow(Xitrain, wordID)
+    BOW_matrix_itest = text_class.convert_to_bow(Xitest, wordID)
+
+    # Convert the corpus titles to a numerical value. 
+    Ytrain = text_class.catID(Xtrain['Corpus'], catID)
+    Ytest = text_class.catID(Xtest['Corpus'], catID)
+    Ydev = text_class.catID(dev.corpus_df['Corpus'], catID)
+
+    # Get improved Y vectors
+    Yitrain = text_class.catID(Xitrain['Corpus'], catID)
+    Yitest = text_class.catID(Xitest['Corpus'], catID)
+
+    # Strain the svm
+    model = text_class.train_model(BOW_matrix_train,Ytrain, 3)
+    i_model = text_class.train_model(BOW_matrix_itrain,Yitrain, 3, lin=False)
+
+    # Run the svm on training, testing and development sets.
+    predictions1 = model.predict(BOW_matrix_train)
+    predictions2 = model.predict(BOW_matrix_test)
+    predictions3 = model.predict(BOW_matrix_dev)
+
+    # Run the improved svm on training, testing and development sets.
+    predictionsi1 = i_model.predict(BOW_matrix_itrain)
+    predictionsi2 = i_model.predict(BOW_matrix_itest)
+    predictionsi3 = i_model.predict(BOW_matrix_dev)
+
+    # # Obtain accuracy among other stats
+    print('Improved')
+
+    print(text_class.compute_accuracy(predictionsi1,Yitrain))
+    print(text_class.compute_accuracy(predictionsi2,Yitest))
+    print(text_class.compute_accuracy(predictionsi3, Ydev))
+
+    print('Baseline:')
+
+    print(text_class.compute_accuracy(predictions1,Ytrain))
+    print(text_class.compute_accuracy(predictions2,Ytest))
+    print(text_class.compute_accuracy(predictions3, Ydev))
+
+    Precisiontr, Recalltr, f1tr = text_class.compute_stats(predictions1, Ytrain)
+    PrecisionTst, RecallTst, f1Tst = text_class.compute_stats(predictions2, Ytest)
+    Precisiond, Recalld, f1d = text_class.compute_stats(predictions3, Ydev)
+
+    Precisiontri, Recalltri, f1tri = text_class.compute_stats(predictionsi1, Yitrain)
+    PrecisionTsti, RecallTsti, f1Tsti = text_class.compute_stats(predictionsi2, Yitest)
+    Precisiondi, Recalldi, f1di = text_class.compute_stats(predictionsi3, Ydev)
+
+    # Building the file for task 3
+    task3 = "system,split,p-quran,r-quran,f-quran,p-ot,r-ot,f-ot,p-nt,r-nt,f-nt,p-macro,r-macro,f-macro" + "\n"
+    models = ['baseline,train,', 'baseline,dev,','baseline,test,', 'improved,train,', 'improved,dev,', 'improved,test,'] # Add improved models
     
-    # with open('michi.txt', 'w') as f:
-    #     f.write(str(t_evl.michi))
+    for i,model in enumerate(models):
+        task3+=model
 
-    # t_evl.michi_to_csv('michi.txt')
+        a = catID['Quran']
+        j = catID['OT']
+        k = catID['NT']
 
-    ################ END ##############################
+        if i == 0:
+            task3+= str(Precisiontr[a]) + "," + str(Recalltr[a]) + "," + str(f1tr[a]) + "," + str(Precisiontr[j]) + "," + str(Recalltr[j]) + "," + str(f1tr[j]) + "," + str(Precisiontr[k]) + "," + str(Recalltr[k]) + "," + str(f1tr[k]) + "," + str(Precisiontr[3]) + "," + str(Recalltr[3]) + "," + str(f1tr[3]) + "\n"
 
-    # corpus_data = t_evl.corpus_df.copy(deep=True)
+        if i == 1:
+            task3+= str(Precisiond[a]) + "," + str(Recalld[a]) + "," + str(f1d[a]) + "," + str(Precisiond[j]) + "," + str(Recalld[j]) + "," + str(f1d[j]) + "," + str(Precisiond[k]) + "," + str(Recalld[k]) + "," + str(f1d[k]) + "," + str(Precisiond[3]) + "," + str(Recalld[3]) + "," + str(f1d[3]) + "\n"
 
-    # print(corpus_data)
+        if i == 2:
+            task3+= str(PrecisionTst[a]) + "," + str(RecallTst[a]) + "," + str(f1Tst[a]) + "," + str(PrecisionTst[j]) + "," + str(RecallTst[j]) + "," + str(f1Tst[j]) + "," + str(PrecisionTst[k]) + "," + str(RecallTst[k]) + "," + str(f1Tst[k]) + "," + str(PrecisionTst[3]) + "," + str(RecallTst[3]) + "," + str(f1Tst[3]) + "\n"
 
-    ###### RUN THIS FOR PART 3 ##########  corpus_data = the pre_processed data from part 1
+        if i == 3:
+            task3+= str(Precisiontri[a]) + "," + str(Recalltri[a]) + "," + str(f1tri[a]) + "," + str(Precisiontri[j]) + "," + str(Recalltri[j]) + "," + str(f1tri[j]) + "," + str(Precisiontri[k]) + "," + str(Recalltri[k]) + "," + str(f1tri[k]) + "," + str(Precisiontri[3]) + "," + str(Recalltri[3]) + "," + str(f1tri[3]) + "\n"
 
-    # text_class = text_classifier(corpus_data)
+        if i == 4:
+            task3+= str(PrecisionTsti[a]) + "," + str(RecallTsti[a]) + "," + str(f1Tsti[a]) + "," + str(PrecisionTsti[j]) + "," + str(RecallTsti[j]) + "," + str(f1Tsti[j]) + "," + str(PrecisionTsti[k]) + "," + str(RecallTsti[k]) + "," + str(f1Tsti[k]) + "," + str(PrecisionTsti[3]) + "," + str(RecallTsti[3]) + "," + str(f1Tsti[3]) + "\n"
 
-    # print(text_class.corpus)
+        if i == 5:
+            task3+= str(Precisiondi[a]) + "," + str(Recalldi[a]) + "," + str(f1di[a]) + "," + str(Precisiondi[j]) + "," + str(Recalldi[j]) + "," + str(f1di[j]) + "," + str(Precisiondi[k]) + "," + str(Recalldi[k]) + "," + str(f1di[k]) + "," + str(Precisiondi[3]) + "," + str(Recalldi[3]) + "," + str(f1di[3]) + "\n"
 
-    # vocab,titles = text_class.get_vocab(text_class.corpus)
+    with open('classification.csv','w') as f:
+        f.write(task3)
+        f.close()
 
-    # wordID, catID = text_class.word_cat_2ID(vocab,titles)
+    ####### PART 3 END ##########
 
-    # Xtrain, Xtest = text_class.shuffle_and_split(text_class.corpus)
+    # Create a corpus from a list of texts
 
-    # BOW_matrix_train = text_class.convert_to_bow(Xtrain, wordID)
+    #
+    #
+    # LDA BEGIN!!!
+    #
+    #
 
-    # BOW_matrix_test = text_class.convert_to_bow(Xtest, wordID)
+    texts = [list(x) for x in t_evl.corpus_df['Verse'].values]
 
-    # BOW_matrix_test2 = text_class.convert_to_bow(testing_corpus, wordID)
+    id2word = corpora.Dictionary(texts)
+    
+    corpus = []
+    for text in texts:
+        new = id2word.doc2bow(text)
+        corpus.append(new)
 
-    # print(catID)
+    lda_model = ldamodel.LdaModel(corpus=corpus,
+                                id2word=id2word,
+                                num_topics=20,
+                                update_every=1,
+                                chunksize=100,
+                                passes=10,
+                                alpha='auto',
+                                )
 
-    # Ytrain = text_class.catID(Xtrain['Corpus'], catID)
+    docs1 = [list(x) for x in t_evl.corpus_df[t_evl.corpus_df['Corpus']=='Quran']['Verse'].values]
+    docs2 = [list(x) for x in t_evl.corpus_df[t_evl.corpus_df['Corpus']=='OT']['Verse'].values]
+    docs3 = [list(x) for x in t_evl.corpus_df[t_evl.corpus_df['Corpus']=='NT']['Verse'].values]
 
-    # Ytest = text_class.catID(Xtest['Corpus'], catID)
+    avg_score = {}
 
-    # Ytest2 = text_class.catID(testing_corpus['Corpus'], catID)
+    for x in range(lda_model.num_topics):
+        avg_score[x]=0
 
-    # model = text_class.train_model(BOW_matrix_train,Ytrain, 3)
+    for doc in docs1:
+        instance = id2word.doc2bow(doc)
+        ps = lda_model[instance]
 
-    # predictions = model.predict(BOW_matrix_train)
+        for t,p in ps:
+            avg_score[t]+=p
 
-    # print(text_class.compute_accuracy(predictions,Ytrain))
+    for t in avg_score.keys():
+        avg_score[t] = avg_score[t]/len(docs1)
 
-    # predictions = model.predict(BOW_matrix_test)
+    avg_score2 = {}
 
-    # print(text_class.compute_accuracy(predictions,Ytest))
+    for x in range(lda_model.num_topics):
+        avg_score2[x]=0
 
-    # predictions = model.predict(BOW_matrix_test2)
+    for doc in docs2:
+        instance = id2word.doc2bow(doc)
+        ps = lda_model[instance]
 
-    # print(text_class.compute_accuracy(predictions,Ytest2))
+        for t,p in ps:
+            avg_score2[t]+=p
 
-    # print(text_class.compute_stats(predictions, Ytest2))
+    for t in avg_score2.keys():
+        avg_score2[t] = avg_score2[t]/len(docs2)
 
-    ######## PART 3 END ##########
+    avg_score3 = {}
 
+    for x in range(lda_model.num_topics):
+        avg_score3[x]=0
+
+    for doc in docs3:
+        instance = id2word.doc2bow(doc)
+        ps = lda_model[instance]
+
+        for t,p in ps:
+            avg_score3[t]+=p
+
+    for t in avg_score3.keys():
+        avg_score3[t] = avg_score3[t]/len(docs3)
+
+    quran_topic = max(avg_score, key=avg_score.get)
+    OT_topic = max(avg_score2, key=avg_score2.get)
+    NT_topic = max(avg_score3, key=avg_score3.get)
+
+
+    string = ""
+    for idx, topic in lda_model.print_topics(-1):
+
+        parsed = [str(x) for x in re.split('[^A-Z^a-z\d]', topic)]
+
+        topic = ""
+        for p in parsed:
+            topic += p + " "
+
+        if idx == quran_topic:
+            string+= "Quran most likely topic and terms: " + topic + "\n"
+        if idx == OT_topic:
+            string+= "OT most likely topic and terms: " + topic + "\n"
+        if idx == NT_topic:
+            string+= "NT most likely topic and terms: " + topic
+
+    with open('LDA_results.txt', 'w') as f:
+        f.write(string)
+        f.close()
+    
+    
+    
+    # LDA END !!!!!!!!
+    
+    
 
 if __name__ == '__main__':
     main()
